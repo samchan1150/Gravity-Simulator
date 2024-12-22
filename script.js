@@ -7,6 +7,7 @@ const heightInput = document.getElementById('height');
 const gravityInput = document.getElementById('gravity');
 const frictionInput = document.getElementById('friction');
 const simulateBtn = document.getElementById('simulateBtn');
+const ballInfoDiv = document.getElementById('ballInfo');
 const energyCanvas = document.getElementById('energyCanvas');
 const energyCtx = energyCanvas.getContext('2d');
 const lineGraphCanvas = document.getElementById('lineGraphCanvas');
@@ -89,61 +90,60 @@ class PhysicsObject {
     }
 
     update(deltaTime) {
-        // Kinetic energy before updates
-        let kineticEnergyBefore = 0.5 * this.mass * Math.pow(this.velocity, 2);
-
-        // Update velocity due to gravity
-        this.velocity += this.gravity * deltaTime;
-
-        // Apply friction (if any)
-        if (this.friction > 0) {
-            // Velocity before friction
-            let velocityBeforeFriction = this.velocity;
-
-            // Apply friction (damping force)
-            this.velocity -= this.velocity * this.friction * deltaTime;
-
-            // Kinetic energy after friction
-            let kineticEnergyAfterFriction = 0.5 * this.mass * Math.pow(this.velocity, 2);
-
-            // Energy lost due to friction
-            let energyLostFriction = kineticEnergyBefore - kineticEnergyAfterFriction;
-            if (energyLostFriction < 0) energyLostFriction = 0;
-
-            // Increment heat energy
-            this.heatEnergy += energyLostFriction;
-
-            // Update kinetic energy before collision
-            kineticEnergyBefore = kineticEnergyAfterFriction;
-        }
-
+        // Save the velocity before updates
+        let velocityBefore = this.velocity;
+    
+        // Calculate gravitational acceleration (positive value)
+        let gravityAcceleration = this.gravity;
+    
+        // Calculate frictional acceleration (opposes motion)
+        let frictionAcceleration = -this.friction * this.velocity;
+    
+        // Total acceleration
+        let totalAcceleration = gravityAcceleration + frictionAcceleration;
+    
+        // Update velocity
+        this.velocity += totalAcceleration * deltaTime;
+    
+        // Calculate average velocity during the time step
+        let velocityAvg = (velocityBefore + this.velocity) / 2;
+    
         // Update position
-        this.y += this.velocity * deltaTime * scaleY;
-
+        this.y += velocityAvg * deltaTime * scaleY;
+    
+        // Calculate work done by friction (energy lost)
+        let energyLostFriction = this.mass * Math.abs(frictionAcceleration * velocityAvg) * deltaTime;
+    
+        // Increment heat energy
+        this.heatEnergy += energyLostFriction;
+    
+        // Update energies (PE and KE)
+        this.updateEnergies();
+    
         // Check for collision with the ground
         if (this.y + this.radius > canvas.height) {
             // Correct position
             this.y = canvas.height - this.radius;
-
+    
             // Kinetic energy before collision
             let kineticEnergyBeforeCollision = 0.5 * this.mass * Math.pow(this.velocity, 2);
-
-            // Apply inelastic collision
-            this.velocity *= -0.5; // Reverse direction and reduce speed
-
+    
+            // Apply inelastic collision (coefficient of restitution = 0.5)
+            this.velocity *= -0.7; // Reverse direction and reduce speed
+    
             // Kinetic energy after collision
             let kineticEnergyAfterCollision = 0.5 * this.mass * Math.pow(this.velocity, 2);
-
+    
             // Energy lost during collision
             let energyLostCollision = kineticEnergyBeforeCollision - kineticEnergyAfterCollision;
-            if (energyLostCollision < 0) energyLostCollision = 0;
-
+            if (energyLostCollision < 0) energyLostCollision = 0; // Correct for possible negative values
+    
             // Increment heat energy
             this.heatEnergy += energyLostCollision;
+    
+            // Update energies (PE and KE)
+            this.updateEnergies();
         }
-
-        // Update energies (PE and KE)
-        this.updateEnergies();
     }
 
     updateEnergies() {
@@ -205,6 +205,7 @@ function animate(timestamp) {
 
     // Draw energy bar graph
     if (objects.length > 0) {
+        updateBallInfo(objects[0]);
         drawEnergyGraph(objects[0]);
         collectEnergyData(objects[0], totalSimulationTime);
         drawLineGraph();
@@ -391,4 +392,13 @@ function drawLegend(ctx, padding) {
     ctx.fillRect(legendX, legendY + 40, 10, 10);
     ctx.fillStyle = '#000';
     ctx.fillText('Heat Energy', legendX + 15, legendY + 50);
+}
+
+function updateBallInfo(obj) {
+    ballInfoDiv.innerHTML = `
+        <h2>Ball Information</h2>
+        <p><strong>Mass:</strong> ${obj.mass.toFixed(2)} kg</p>
+        <p><strong>Velocity:</strong> ${(-obj.velocity).toFixed(2)} m/s</p>
+        <p><strong>Height:</strong> ${Math.max(0, ((canvas.height - obj.y - obj.radius) / scaleY)).toFixed(2)} m</p>
+    `;
 }
