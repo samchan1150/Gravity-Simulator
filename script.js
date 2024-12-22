@@ -68,27 +68,64 @@ class PhysicsObject {
         this.initialHeight = height;
         this.initialVelocity = velocity;
         this.initialTotalEnergy = this.calculateTotalEnergy(height, velocity);
+        this.heatEnergy = 0; // Initialize heat energy
     }
 
     update(deltaTime) {
-        // Update velocity and position
+        // Kinetic energy before updates
+        let kineticEnergyBefore = 0.5 * this.mass * Math.pow(this.velocity, 2);
+
+        // Update velocity due to gravity
         this.velocity += this.gravity * deltaTime;
 
-        // Apply friction
-        this.velocity -= this.velocity * this.friction * deltaTime;
+        // Apply friction (if any)
+        if (this.friction > 0) {
+            // Velocity before friction
+            let velocityBeforeFriction = this.velocity;
 
+            // Apply friction (damping force)
+            this.velocity -= this.velocity * this.friction * deltaTime;
+
+            // Kinetic energy after friction
+            let kineticEnergyAfterFriction = 0.5 * this.mass * Math.pow(this.velocity, 2);
+
+            // Energy lost due to friction
+            let energyLostFriction = kineticEnergyBefore - kineticEnergyAfterFriction;
+            if (energyLostFriction < 0) energyLostFriction = 0;
+
+            // Increment heat energy
+            this.heatEnergy += energyLostFriction;
+
+            // Update kinetic energy before collision
+            kineticEnergyBefore = kineticEnergyAfterFriction;
+        }
+
+        // Update position
         this.y += this.velocity * deltaTime * scaleY;
 
         // Check for collision with the ground
         if (this.y + this.radius > canvas.height) {
+            // Correct position
             this.y = canvas.height - this.radius;
-            this.velocity *= -0.5; // Bounce with energy loss
 
-            // Apply friction upon bouncing
-            this.velocity -= this.velocity * this.friction * deltaTime;
+            // Kinetic energy before collision
+            let kineticEnergyBeforeCollision = 0.5 * this.mass * Math.pow(this.velocity, 2);
+
+            // Apply inelastic collision
+            this.velocity *= -0.5; // Reverse direction and reduce speed
+
+            // Kinetic energy after collision
+            let kineticEnergyAfterCollision = 0.5 * this.mass * Math.pow(this.velocity, 2);
+
+            // Energy lost during collision
+            let energyLostCollision = kineticEnergyBeforeCollision - kineticEnergyAfterCollision;
+            if (energyLostCollision < 0) energyLostCollision = 0;
+
+            // Increment heat energy
+            this.heatEnergy += energyLostCollision;
         }
 
-        // Update energies
+        // Update energies (PE and KE)
         this.updateEnergies();
     }
 
@@ -101,18 +138,12 @@ class PhysicsObject {
         this.potentialEnergy = this.mass * this.gravity * currentHeight;
 
         // Kinetic Energy: KE = 0.5 * m * v^2
-        this.kineticEnergy = 0.5 * this.mass * Math.pow(this.velocity / scaleY, 2);
-
-        // Heat/Sound Energy: Difference from initial total energy
-        this.heatEnergy = this.initialTotalEnergy - (this.potentialEnergy + this.kineticEnergy);
-
-        // Correct for small negative values due to floating-point inaccuracies
-        if (this.heatEnergy < 0) this.heatEnergy = 0;
+        this.kineticEnergy = 0.5 * this.mass * Math.pow(this.velocity, 2);
     }
 
     calculateTotalEnergy(height, velocity) {
         const potentialEnergy = this.mass * this.gravity * height;
-        const kineticEnergy = 0.5 * this.mass * velocity * velocity;
+        const kineticEnergy = 0.5 * this.mass * Math.pow(velocity, 2);
         return potentialEnergy + kineticEnergy;
     }
 
@@ -161,35 +192,57 @@ function animate(timestamp) {
 function drawEnergyGraph(obj) {
     const totalEnergy = obj.initialTotalEnergy;
 
-    // Normalize energies to canvas height
-    const peHeight = (obj.potentialEnergy / totalEnergy) * energyCanvas.height;
-    const keHeight = (obj.kineticEnergy / totalEnergy) * energyCanvas.height;
-    const heHeight = (obj.heatEnergy / totalEnergy) * energyCanvas.height;
+    // Calculating usable canvas height
+    const canvasUsableHeight = energyCanvas.height - 60; // Reserve space for title and labels
 
-    const barWidth = energyCanvas.width / 4;
-    const spacing = energyCanvas.width / 8;
+    // Normalize energies to canvas height
+    const peHeight = (obj.potentialEnergy / totalEnergy) * canvasUsableHeight;
+    const keHeight = (obj.kineticEnergy / totalEnergy) * canvasUsableHeight;
+    const heHeight = (obj.heatEnergy / totalEnergy) * canvasUsableHeight;
+
+    const numBars = 3;
+    const totalSpacing = energyCanvas.width * 0.2;
+    const spacing = totalSpacing / (numBars + 1);
+    const barWidth = (energyCanvas.width - totalSpacing) / numBars;
+
+    const graphBaseY = energyCanvas.height - 20; // Leave space at the bottom for labels
+
+    // Clear the energy canvas
+    energyCtx.clearRect(0, 0, energyCanvas.width, energyCanvas.height);
+
+    // Positions for each bar
+    const peX = spacing;
+    const keX = peX + barWidth + spacing;
+    const heX = keX + barWidth + spacing;
 
     // Potential Energy bar
     energyCtx.fillStyle = '#00FF00'; // Green
-    energyCtx.fillRect(spacing, energyCanvas.height - peHeight, barWidth, peHeight);
+    energyCtx.fillRect(peX, graphBaseY - peHeight, barWidth, peHeight);
     // Add label
     energyCtx.fillStyle = '#000';
     energyCtx.font = '14px Arial';
-    energyCtx.fillText('PE', spacing + barWidth / 4, energyCanvas.height - peHeight - 10);
+    energyCtx.fillText('PE', peX + barWidth / 2, graphBaseY - peHeight - 10);
 
     // Kinetic Energy bar
     energyCtx.fillStyle = '#0000FF'; // Blue
-    energyCtx.fillRect(spacing * 3 + barWidth, energyCanvas.height - keHeight, barWidth, keHeight);
+    energyCtx.fillRect(keX, graphBaseY - keHeight, barWidth, keHeight);
     // Add label
     energyCtx.fillStyle = '#000';
-    energyCtx.fillText('KE', spacing * 3 + barWidth + barWidth / 4, energyCanvas.height - keHeight - 10);
+    energyCtx.fillText('KE', keX + barWidth / 2, graphBaseY - keHeight - 10);
 
     // Heat/Sound Energy bar
     energyCtx.fillStyle = '#FF0000'; // Red
-    energyCtx.fillRect(spacing * 5 + barWidth * 2, energyCanvas.height - heHeight, barWidth, heHeight);
+    energyCtx.fillRect(heX, graphBaseY - heHeight, barWidth, heHeight);
     // Add label
     energyCtx.fillStyle = '#000';
-    energyCtx.fillText('Heat', spacing * 5 + barWidth * 2 + barWidth / 8, energyCanvas.height - heHeight - 10);
+    energyCtx.fillText('Heat', heX + barWidth / 2, graphBaseY - heHeight - 10);
+
+    // Add title to the energy bar graph
+    energyCtx.fillStyle = '#000';
+    energyCtx.font = '16px Arial';
+    energyCtx.textAlign = 'center';
+    energyCtx.fillText('Energy Distribution', energyCanvas.width / 2, 30);
 }
+
 
 
