@@ -1,0 +1,23 @@
+/* styles.css */
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+}
+
+#controls {
+    margin-bottom: 20px;
+}
+
+#controls label {
+    display: inline-block;
+    margin: 0 10px;
+}
+
+#controls input {
+    width: 60px;
+}
+
+#simulationCanvas {
+    border: 1px solid #000;
+    background-color: #f0f0f0;
+}
