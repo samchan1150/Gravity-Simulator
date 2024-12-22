@@ -7,13 +7,22 @@ const heightInput = document.getElementById('height');
 const gravityInput = document.getElementById('gravity');
 const frictionInput = document.getElementById('friction');
 const simulateBtn = document.getElementById('simulateBtn');
-
 const energyCanvas = document.getElementById('energyCanvas');
 const energyCtx = energyCanvas.getContext('2d');
+const lineGraphCanvas = document.getElementById('lineGraphCanvas');
+const lineGraphCtx = lineGraphCanvas.getContext('2d');
 
 let objects = []; // Array to store the objects (will contain only one object)
 let animationId = null;
 let lastTimestamp = 0;
+let energyData = {
+    time: [],
+    potentialEnergy: [],
+    kineticEnergy: [],
+    heatEnergy: []
+};
+let simulationStartTime = null;
+let totalSimulationTime = 0;
 
 // Scaling factor to convert meters to pixels
 const scaleY = canvas.height / 200; // Adjust based on the maximum height you expect
@@ -44,7 +53,15 @@ simulateBtn.addEventListener('click', () => {
     const obj = new PhysicsObject(mass, velocity, height, gravity, friction);
     objects.push(obj);
     console.log('Object created:', obj);
-    
+    // Reset energy data and time tracking variables
+    energyData = {
+        time: [],
+        potentialEnergy: [],
+        kineticEnergy: [],
+        heatEnergy: []
+    };
+    simulationStartTime = null;
+    totalSimulationTime = 0;
 
     // Start the animation
     lastTimestamp = 0; // Reset timestamp
@@ -166,11 +183,15 @@ class PhysicsObject {
 
 // Animation loop
 function animate(timestamp) {
+    if (simulationStartTime === null) {
+        simulationStartTime = timestamp;
+    }
     if (!lastTimestamp) {
         lastTimestamp = timestamp;
     }
     const deltaTime = (timestamp - lastTimestamp) / 1000; // Convert to seconds
     lastTimestamp = timestamp;
+    totalSimulationTime = (timestamp - simulationStartTime) / 1000;
 
     animationId = requestAnimationFrame(animate);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -185,6 +206,8 @@ function animate(timestamp) {
     // Draw energy bar graph
     if (objects.length > 0) {
         drawEnergyGraph(objects[0]);
+        collectEnergyData(objects[0], totalSimulationTime);
+        drawLineGraph();
     }
 }
 
@@ -244,5 +267,128 @@ function drawEnergyGraph(obj) {
     energyCtx.fillText('Energy Distribution', energyCanvas.width / 2, 30);
 }
 
+function collectEnergyData(obj, currentTime) {
+    energyData.time.push(currentTime);
+    energyData.potentialEnergy.push(obj.potentialEnergy);
+    energyData.kineticEnergy.push(obj.kineticEnergy);
+    energyData.heatEnergy.push(obj.heatEnergy);
+}
+
+function drawLineGraph() {
+    // Clear the canvas
+    lineGraphCtx.clearRect(0, 0, lineGraphCanvas.width, lineGraphCanvas.height);
+
+    // Set up graph dimensions
+    const padding = 40;
+    const graphWidth = lineGraphCanvas.width - padding * 2;
+    const graphHeight = lineGraphCanvas.height - padding * 2;
+
+    // Draw axes
+    lineGraphCtx.strokeStyle = '#000';
+    lineGraphCtx.lineWidth = 1;
+    lineGraphCtx.beginPath();
+    // X-axis
+    lineGraphCtx.moveTo(padding, lineGraphCanvas.height - padding);
+    lineGraphCtx.lineTo(lineGraphCanvas.width - padding, lineGraphCanvas.height - padding);
+    // Y-axis
+    lineGraphCtx.moveTo(padding, lineGraphCanvas.height - padding);
+    lineGraphCtx.lineTo(padding, padding);
+    lineGraphCtx.stroke();
+
+    // Get total time and maximum energy for scaling
+    const totalTime = energyData.time[energyData.time.length - 1];
+    const maxEnergy = objects[0].initialTotalEnergy;
+
+    // Draw grid lines and labels (optional)
+    drawGridLinesAndLabels(lineGraphCtx, totalTime, maxEnergy, padding, graphWidth, graphHeight);
+
+    // Plot the energy lines
+    plotEnergyLine(energyData.time, energyData.potentialEnergy, totalTime, maxEnergy, padding, graphWidth, graphHeight, '#00FF00'); // PE in green
+    plotEnergyLine(energyData.time, energyData.kineticEnergy, totalTime, maxEnergy, padding, graphWidth, graphHeight, '#0000FF'); // KE in blue
+    plotEnergyLine(energyData.time, energyData.heatEnergy, totalTime, maxEnergy, padding, graphWidth, graphHeight, '#FF0000'); // Heat in red
+
+    // Add legend
+    drawLegend(lineGraphCtx, padding);
+}
 
 
+function plotEnergyLine(timeData, energyDataArray, totalTime, maxEnergy, padding, graphWidth, graphHeight, color) {
+    if (timeData.length < 2) return;
+
+    lineGraphCtx.strokeStyle = color;
+    lineGraphCtx.lineWidth = 2;
+    lineGraphCtx.beginPath();
+
+    for (let i = 0; i < timeData.length; i++) {
+        const x = padding + (timeData[i] / totalTime) * graphWidth;
+        const y = lineGraphCanvas.height - padding - (energyDataArray[i] / maxEnergy) * graphHeight;
+
+        if (i === 0) {
+            lineGraphCtx.moveTo(x, y);
+        } else {
+            lineGraphCtx.lineTo(x, y);
+        }
+    }
+
+    lineGraphCtx.stroke();
+}
+
+
+function drawGridLinesAndLabels(ctx, totalTime, maxEnergy, padding, graphWidth, graphHeight) {
+    ctx.strokeStyle = '#ccc';
+    ctx.fillStyle = '#000';
+    ctx.font = '12px Arial';
+
+    // Time intervals (X-axis)
+    const timeIntervals = 5;
+    for (let i = 0; i <= timeIntervals; i++) {
+        const x = padding + (i / timeIntervals) * graphWidth;
+        const timeLabel = (totalTime * i / timeIntervals).toFixed(1) + 's';
+
+        // Vertical grid line
+        ctx.beginPath();
+        ctx.moveTo(x, padding);
+        ctx.lineTo(x, lineGraphCanvas.height - padding);
+        ctx.stroke();
+
+        // Time label
+        ctx.fillText(timeLabel, x - 10, lineGraphCanvas.height - padding + 15);
+    }
+
+    // Energy intervals (Y-axis)
+    const energyIntervals = 5;
+    for (let i = 0; i <= energyIntervals; i++) {
+        const y = lineGraphCanvas.height - padding - (i / energyIntervals) * graphHeight;
+        const energyLabel = (maxEnergy * i / energyIntervals).toFixed(0);
+
+        // Horizontal grid line
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(lineGraphCanvas.width - padding, y);
+        ctx.stroke();
+
+        // Energy label
+        ctx.fillText(energyLabel, padding - 35, y + 5);
+    }
+}
+
+
+function drawLegend(ctx, padding) {
+    const legendX = lineGraphCanvas.width - padding - 100;
+    const legendY = padding + 10;
+
+    ctx.fillStyle = '#00FF00';
+    ctx.fillRect(legendX, legendY, 10, 10);
+    ctx.fillStyle = '#000';
+    ctx.fillText('Potential Energy', legendX + 15, legendY + 10);
+
+    ctx.fillStyle = '#0000FF';
+    ctx.fillRect(legendX, legendY + 20, 10, 10);
+    ctx.fillStyle = '#000';
+    ctx.fillText('Kinetic Energy', legendX + 15, legendY + 30);
+
+    ctx.fillStyle = '#FF0000';
+    ctx.fillRect(legendX, legendY + 40, 10, 10);
+    ctx.fillStyle = '#000';
+    ctx.fillText('Heat Energy', legendX + 15, legendY + 50);
+}
