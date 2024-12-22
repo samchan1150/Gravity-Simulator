@@ -21,3 +21,18 @@ body {
     border: 1px solid #000;
     background-color: #f0f0f0;
 }
+
+#simulationContainer {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+#simulationCanvas, #energyCanvas {
+    border: 1px solid #000;
+    background-color: #f0f0f0;
+}
+
+#energyCanvas {
+    margin-left: 20px;
+}
